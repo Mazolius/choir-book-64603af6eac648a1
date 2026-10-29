@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>ICC Choir – Accessible Lyrics</title>
+  <style>
+    body { font: 1.2rem/1.6 system-ui, sans-serif; max-width: 45rem; margin: 3rem auto; padding: 0 1.25rem; color: #202b3b; background: #fbfaf7; }
+    @media (prefers-color-scheme: dark) { body { color: #ecf2f8; background: #111927; } }
+  </style>
+</head>
+<body>
+  <main id="loading" aria-live="polite">
+    <h1>ICC Choir – Accessible Lyrics</h1>
+    <p>Loading the songbook…</p>
+  </main>
+  <script>
+  (async () => {
+    const status = document.querySelector('#loading p');
+    try {
+      const encoded = new URLSearchParams(location.hash.slice(1)).get('k');
+      if (!encoded || !/^[A-Za-z0-9_-]{43}$/.test(encoded)) {
+        status.textContent = 'This link is incomplete. Ask for the full choir link.';
+        return;
+      }
+      const bytes = text => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - text.length % 4) % 4)), char => char.charCodeAt(0));
+      const key = await crypto.subtle.importKey('raw', bytes(encoded), 'AES-GCM', false, ['decrypt']);
+      const response = await fetch('book.json', {cache: 'no-store'});
+      if (!response.ok) throw new Error('Songbook unavailable');
+      const book = await response.json();
+      if (book.v !== 1) throw new Error('Unsupported songbook');
+      const plaintext = await crypto.subtle.decrypt({name: 'AES-GCM', iv: bytes(book.iv)}, key, bytes(book.data));
+      const parsed = new DOMParser().parseFromString(new TextDecoder().decode(plaintext), 'text/html');
+      if (!parsed.querySelector('main#main') || !parsed.querySelector('nav#contents')) throw new Error('Invalid songbook');
+      // The songbook's internal anchors may change the hash. Restore the key so
+      // refreshing or copying the current page address still opens the book.
+      addEventListener('hashchange', () => {
+        if (!location.hash.startsWith('#k=')) history.replaceState(null, '', '#k=' + encoded);
+      });
+      document.documentElement.lang = parsed.documentElement.lang || 'en';
+      document.head.innerHTML = parsed.head.innerHTML;
+      document.body.innerHTML = parsed.body.innerHTML;
+      document.title = parsed.title;
+    } catch (error) {
+      status.textContent = 'The songbook could not be opened. Check that you used the full choir link, or ask for an updated link.';
+    }
+  })();
+  </script>
+</body>
+</html>
